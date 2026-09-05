@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.routers import auth, chat, courses, documents, quiz
+from app.routers import auth, chat, courses, documents, internal, quiz, topic_tags
 
 settings = get_settings()
 
@@ -21,6 +21,8 @@ app.include_router(courses.router)
 app.include_router(documents.router)
 app.include_router(chat.router)
 app.include_router(quiz.router)
+app.include_router(topic_tags.router)
+app.include_router(internal.router)
 
 
 @app.get("/health")

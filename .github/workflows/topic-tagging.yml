@@ -1,0 +1,24 @@
+name: Topic tagging
+
+# Runs weekly and calls the backend's protected internal endpoint (PROJECT_PLAN.md
+# section 11). The HTTP call itself wakes a sleeping Render free-tier instance, so
+# this also doubles as the cold-start trigger -- no in-process scheduler is needed.
+#
+# Before this can run, set two repository secrets (Settings -> Secrets and
+# variables -> Actions):
+#   BACKEND_URL             e.g. https://your-backend.onrender.com
+#   INTERNAL_SHARED_SECRET  must match INTERNAL_SHARED_SECRET in the backend's env
+
+on:
+  schedule:
+    - cron: "0 3 * * 1" # every Monday at 03:00 UTC
+  workflow_dispatch: {} # allows a manual run from the Actions tab
+
+jobs:
+  run-topic-tagging:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call topic-tagging endpoint
+        run: |
+          curl -sf -X POST "${{ secrets.BACKEND_URL }}/internal/topic-tagging/run" \
+            -H "X-Internal-Secret: ${{ secrets.INTERNAL_SHARED_SECRET }}"

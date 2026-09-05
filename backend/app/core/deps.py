@@ -1,9 +1,11 @@
+import hmac
 import uuid
 
-from fastapi import Depends, HTTPException, Response, status
+from fastapi import Depends, Header, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.db import get_db
 from app.core.security import create_access_token, decode_access_token
 from app.models.user import User, UserRole
@@ -42,3 +44,9 @@ def require_role(role: UserRole):
         return user
 
     return _check
+
+
+async def require_internal_secret(x_internal_secret: str | None = Header(default=None)) -> None:
+    settings = get_settings()
+    if not x_internal_secret or not hmac.compare_digest(x_internal_secret, settings.internal_shared_secret):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or missing internal secret")
