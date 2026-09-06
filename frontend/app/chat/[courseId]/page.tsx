@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { apiFetch, ApiError } from "@/lib/api";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { TypingDots } from "@/components/ui/Spinner";
+import { Markdown } from "@/components/Markdown";
 
 interface Course {
   course_id: string;
@@ -132,13 +133,13 @@ export default function ChatPage({ params }: PageProps<"/chat/[courseId]">) {
               className={`animate-fade-in flex ${m.sender === "user" ? "justify-end" : "justify-start"}`}
             >
               <div
-                className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm ${
+                className={`max-w-[85%] rounded-2xl px-4 py-2.5 shadow-sm ${
                   m.sender === "user"
-                    ? "rounded-br-md bg-accent text-accent-foreground"
+                    ? "rounded-br-md bg-accent text-sm leading-relaxed text-accent-foreground"
                     : "rounded-bl-md border border-border bg-background text-foreground"
                 }`}
               >
-                {m.content}
+                {m.sender === "assistant" ? <Markdown content={m.content} /> : m.content}
                 {m.sender === "assistant" && m.grounded === false && (
                   <div className="mt-2 inline-block rounded-full border border-warning-border bg-warning-bg px-2.5 py-0.5 text-xs font-medium text-warning">
                     Not found in course material
@@ -170,7 +171,7 @@ export default function ChatPage({ params }: PageProps<"/chat/[courseId]">) {
             onChange={(e) => setQuestion(e.target.value)}
             placeholder="Ask a question..."
             disabled={asking}
-            className="flex-1 rounded-xl border border-border bg-background px-4 py-2.5 text-sm outline-none transition-shadow focus:ring-2 focus:ring-accent/40 disabled:opacity-60"
+            className="min-w-0 flex-1 rounded-xl border border-border bg-background px-4 py-2.5 text-sm outline-none transition-shadow focus:ring-2 focus:ring-accent/40 disabled:opacity-60"
           />
           <button
             type="submit"

@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { useToast } from "@/lib/toast";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Spinner } from "@/components/ui/Spinner";
+import { Markdown } from "@/components/Markdown";
 
 interface Course {
   course_id: string;
@@ -113,7 +114,8 @@ export default function HistoryPage() {
                       m.sender === "user" ? "bg-accent/10" : "border border-border bg-background"
                     }`}
                   >
-                    <span className="font-medium">{m.sender === "user" ? "You" : "Assistant"}:</span> {m.content}
+                    <span className="font-medium">{m.sender === "user" ? "You" : "Assistant"}:</span>{" "}
+                    {m.sender === "assistant" ? <Markdown content={m.content} /> : m.content}
                   </div>
                 ))}
               </div>

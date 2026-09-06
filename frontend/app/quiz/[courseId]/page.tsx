@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { apiFetch, ApiError } from "@/lib/api";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Spinner } from "@/components/ui/Spinner";
+import { Markdown } from "@/components/Markdown";
 
 interface Course {
   course_id: string;
@@ -150,7 +151,7 @@ export default function QuizPage({ params }: PageProps<"/quiz/[courseId]">) {
             onChange={(e) => setTopic(e.target.value)}
             placeholder="Topic, e.g. Arrays and Linked Lists"
             disabled={generating}
-            className="flex-1 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm outline-none transition-shadow focus:ring-2 focus:ring-accent/40 disabled:opacity-60"
+            className="min-w-0 flex-1 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm outline-none transition-shadow focus:ring-2 focus:ring-accent/40 disabled:opacity-60"
           />
           <button
             type="submit"
@@ -243,7 +244,7 @@ export default function QuizPage({ params }: PageProps<"/quiz/[courseId]">) {
               {!r.correct && (
                 <p className="text-sm text-muted">Correct answer: {r.options[r.correct_index]}</p>
               )}
-              {r.explanation && <p className="mt-1.5 text-sm text-muted">{r.explanation}</p>}
+              {r.explanation && <div className="mt-1.5 text-muted"><Markdown content={r.explanation} /></div>}
             </div>
           ))}
           <button

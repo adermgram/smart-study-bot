@@ -8,6 +8,7 @@ import { useToast } from "@/lib/toast";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Spinner } from "@/components/ui/Spinner";
 import { BarRow } from "@/components/ui/BarRow";
+import { StatTile } from "@/components/ui/StatTile";
 
 interface Course {
   course_id: string;
@@ -89,10 +90,12 @@ export default function LecturerDashboardPage() {
 
   const maxQuestionCount = Math.max(1, ...questionTags.map((t) => t.question_count ?? 0));
 
-  function quizScoreColor(pct: number) {
-    if (pct < 50) return "bg-danger";
-    if (pct < 75) return "bg-warning";
-    return "bg-success";
+  // Status color + word travel together -- a colorblind reader shouldn't need the
+  // hue alone to know a topic needs attention (dataviz: status is never color-only).
+  function quizSeverity(pct: number) {
+    if (pct < 50) return { fill: "bg-danger", track: "bg-danger/15", text: "text-danger", word: "Struggling" };
+    if (pct < 75) return { fill: "bg-warning", track: "bg-warning/15", text: "text-warning", word: "Mixed" };
+    return { fill: "bg-success", track: "bg-success/15", text: "text-success", word: "Solid" };
   }
 
   if (loading || !user) return null;
@@ -141,62 +144,88 @@ export default function LecturerDashboardPage() {
       <section className="mt-8">
         <h2 className="text-base font-semibold">Most-asked topics</h2>
         <p className="text-xs text-muted">Students are curious about these -- consider more examples or a follow-up note.</p>
-        <ul className="mt-3 space-y-2">
-          {tagsLoading ? (
-            [0, 1].map((i) => <Skeleton key={i} className="h-16 w-full rounded-2xl" />)
-          ) : (
-            <>
-              {questionTags.map((t) => (
-                <li key={t.tag_id} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-                  <BarRow
-                    label={t.topic_label}
-                    valueLabel={`${t.question_count} question${t.question_count === 1 ? "" : "s"}`}
-                    percent={((t.question_count ?? 0) / maxQuestionCount) * 100}
-                  />
-                  <p className="mt-2 text-xs text-muted">
-                    {new Date(t.period_start).toLocaleDateString()} – {new Date(t.period_end).toLocaleDateString()}
-                  </p>
-                </li>
-              ))}
-              {questionTags.length === 0 && (
-                <li className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted">
-                  No questions recorded yet for the current period.
-                </li>
-              )}
-            </>
-          )}
-        </ul>
+        {tagsLoading ? (
+          <div className="mt-3 space-y-2">
+            {[0, 1].map((i) => <Skeleton key={i} className="h-16 w-full rounded-2xl" />)}
+          </div>
+        ) : questionTags.length === 0 ? (
+          <p className="mt-3 rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted">
+            No questions recorded yet for the current period.
+          </p>
+        ) : questionTags.length === 1 ? (
+          <div className="mt-3">
+            <StatTile
+              label={questionTags[0].topic_label}
+              value={String(questionTags[0].question_count)}
+              caption={`question${questionTags[0].question_count === 1 ? "" : "s"} this period`}
+            />
+          </div>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {questionTags.map((t) => (
+              <li key={t.tag_id} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+                <BarRow
+                  label={t.topic_label}
+                  valueLabel={`${t.question_count} question${t.question_count === 1 ? "" : "s"}`}
+                  percent={((t.question_count ?? 0) / maxQuestionCount) * 100}
+                />
+                <p className="mt-2 text-xs text-muted">
+                  {new Date(t.period_start).toLocaleDateString()} – {new Date(t.period_end).toLocaleDateString()}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section className="mt-8">
         <h2 className="text-base font-semibold">Weakest quiz topics</h2>
         <p className="text-xs text-muted">Lowest average self-assessment score -- these may need reteaching, not just more material.</p>
-        <ul className="mt-3 space-y-2">
-          {tagsLoading ? (
-            [0, 1].map((i) => <Skeleton key={i} className="h-16 w-full rounded-2xl" />)
-          ) : (
-            <>
-              {quizTags.map((t) => (
+        {tagsLoading ? (
+          <div className="mt-3 space-y-2">
+            {[0, 1].map((i) => <Skeleton key={i} className="h-16 w-full rounded-2xl" />)}
+          </div>
+        ) : quizTags.length === 0 ? (
+          <p className="mt-3 rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted">
+            No quiz attempts recorded yet for the current period.
+          </p>
+        ) : quizTags.length === 1 ? (
+          (() => {
+            const t = quizTags[0];
+            const s = quizSeverity(t.avg_quiz_score_pct ?? 0);
+            return (
+              <div className="mt-3">
+                <StatTile
+                  label={`${t.topic_label} -- ${s.word}`}
+                  value={`${t.avg_quiz_score_pct?.toFixed(0)}%`}
+                  valueClassName={s.text}
+                  caption={`${t.quiz_attempt_count} attempt${t.quiz_attempt_count === 1 ? "" : "s"} this period`}
+                />
+              </div>
+            );
+          })()
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {quizTags.map((t) => {
+              const s = quizSeverity(t.avg_quiz_score_pct ?? 0);
+              return (
                 <li key={t.tag_id} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
                   <BarRow
                     label={t.topic_label}
                     valueLabel={`${t.avg_quiz_score_pct?.toFixed(0)}% avg (${t.quiz_attempt_count} attempt${t.quiz_attempt_count === 1 ? "" : "s"})`}
                     percent={t.avg_quiz_score_pct ?? 0}
-                    colorClass={quizScoreColor(t.avg_quiz_score_pct ?? 0)}
+                    fillClassName={s.fill}
+                    trackClassName={s.track}
+                    statusWord={s.word}
                   />
                   <p className="mt-2 text-xs text-muted">
                     {new Date(t.period_start).toLocaleDateString()} – {new Date(t.period_end).toLocaleDateString()}
                   </p>
                 </li>
-              ))}
-              {quizTags.length === 0 && (
-                <li className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted">
-                  No quiz attempts recorded yet for the current period.
-                </li>
-              )}
-            </>
-          )}
-        </ul>
+              );
+            })}
+          </ul>
+        )}
       </section>
     </main>
   );

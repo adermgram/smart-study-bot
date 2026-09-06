@@ -50,7 +50,7 @@ export default function CoursesPage() {
           {courses.map((c) => (
             <li
               key={c.course_id}
-              className="flex items-center justify-between rounded-2xl border border-border bg-surface p-4 shadow-sm transition-shadow hover:shadow-md"
+              className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 shadow-sm transition-shadow hover:shadow-md sm:flex-row sm:items-center sm:justify-between"
             >
               <span className="text-sm">
                 <strong className="font-semibold">{c.code}</strong>

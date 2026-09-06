@@ -125,12 +125,12 @@ export default function LecturerUploadPage() {
         <div className="space-y-1">
           <label className="text-sm font-medium" htmlFor="course">Course</label>
           {!addingCourse ? (
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <select
                 id="course"
                 value={courseId}
                 onChange={(e) => setCourseId(e.target.value)}
-                className={`w-full ${inputClass}`}
+                className={`w-full min-w-0 ${inputClass}`}
               >
                 {courses.map((c) => (
                   <option key={c.course_id} value={c.course_id}>
@@ -148,18 +148,18 @@ export default function LecturerUploadPage() {
             </div>
           ) : (
             <div className="space-y-2 rounded-xl border border-border bg-background p-3">
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <input
                   value={newCode}
                   onChange={(e) => setNewCode(e.target.value)}
                   placeholder="Code, e.g. CSC311"
-                  className={`w-32 ${inputClass}`}
+                  className={`min-w-0 sm:w-32 ${inputClass}`}
                 />
                 <input
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
                   placeholder="Title, e.g. Data Structures"
-                  className={`flex-1 ${inputClass}`}
+                  className={`min-w-0 flex-1 ${inputClass}`}
                 />
               </div>
               {courseError && (
