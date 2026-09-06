@@ -13,7 +13,7 @@ interface Course {
 }
 
 export default function CoursesPage() {
-  const { user, loading, logout } = useAuth();
+  const { user, loading } = useAuth();
   const router = useRouter();
   const [courses, setCourses] = useState<Course[]>([]);
 
@@ -29,24 +29,7 @@ export default function CoursesPage() {
 
   return (
     <main className="mx-auto max-w-2xl flex-1 p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Pilot courses</h1>
-        <button onClick={logout} className="text-sm underline">
-          Log out
-        </button>
-      </div>
-
-      {user.role === "lecturer" && (
-        <div className="mb-6 flex gap-4 text-sm">
-          <Link href="/lecturer/upload" className="underline">Upload material</Link>
-          <Link href="/lecturer/dashboard" className="underline">Topic dashboard</Link>
-        </div>
-      )}
-      {user.role === "student" && (
-        <div className="mb-6 text-sm">
-          <Link href="/history" className="underline">My conversation history</Link>
-        </div>
-      )}
+      <h1 className="mb-6 text-2xl font-semibold">Pilot courses</h1>
 
       <ul className="space-y-2">
         {courses.map((c) => (
