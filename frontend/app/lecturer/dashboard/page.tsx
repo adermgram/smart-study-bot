@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { apiFetch, ApiError } from "@/lib/api";
+import { useToast } from "@/lib/toast";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Spinner } from "@/components/ui/Spinner";
 import { BarRow } from "@/components/ui/BarRow";
@@ -28,6 +29,7 @@ interface TopicTag {
 export default function LecturerDashboardPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const { toast } = useToast();
   const [courses, setCourses] = useState<Course[]>([]);
   const [courseId, setCourseId] = useState("");
   const [tags, setTags] = useState<TopicTag[]>([]);
@@ -64,6 +66,7 @@ export default function LecturerDashboardPage() {
     try {
       const fresh = await apiFetch<TopicTag[]>(`/courses/${courseId}/topic-tags/refresh`, { method: "POST" });
       setTags(fresh);
+      toast("Insights refreshed");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not refresh insights");
     } finally {

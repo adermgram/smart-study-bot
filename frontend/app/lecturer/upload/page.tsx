@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { apiFetch, ApiError } from "@/lib/api";
+import { useToast } from "@/lib/toast";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Spinner } from "@/components/ui/Spinner";
 
@@ -27,6 +28,7 @@ const inputClass =
 export default function LecturerUploadPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const { toast } = useToast();
   const [courses, setCourses] = useState<Course[]>([]);
   const [courseId, setCourseId] = useState("");
   const [documents, setDocuments] = useState<DocumentRow[]>([]);
@@ -77,6 +79,7 @@ export default function LecturerUploadPage() {
       setNewCode("");
       setNewTitle("");
       setAddingCourse(false);
+      toast(`Course ${course.code} created`);
     } catch (err) {
       setCourseError(err instanceof ApiError ? err.message : "Could not create the course");
     } finally {
@@ -104,6 +107,7 @@ export default function LecturerUploadPage() {
       const doc: DocumentRow = await res.json();
       setDocuments((docs) => [doc, ...docs]);
       setFile(null);
+      toast(`${doc.title} uploaded and embedded (${doc.chunk_count} chunks)`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Upload failed");
     } finally {

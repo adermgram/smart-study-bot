@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
+import { useToast } from "@/lib/toast";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Spinner } from "@/components/ui/Spinner";
 
@@ -31,6 +32,7 @@ interface Conversation {
 export default function HistoryPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const { toast } = useToast();
   const [courses, setCourses] = useState<Course[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
@@ -63,6 +65,7 @@ export default function HistoryPage() {
     try {
       await apiFetch("/conversations", { method: "DELETE" });
       setConversations([]);
+      toast("Conversation history deleted");
     } finally {
       setDeleting(false);
     }
