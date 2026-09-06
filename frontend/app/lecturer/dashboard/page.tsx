@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { apiFetch, ApiError } from "@/lib/api";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Spinner } from "@/components/ui/Spinner";
+import { BarRow } from "@/components/ui/BarRow";
 
 interface Course {
   course_id: string;
@@ -83,6 +84,14 @@ export default function LecturerDashboardPage() {
     .filter((t) => t.source === "quiz" && t.period_end === latestPeriodEnd("quiz"))
     .sort((a, b) => (a.avg_quiz_score_pct ?? 100) - (b.avg_quiz_score_pct ?? 100));
 
+  const maxQuestionCount = Math.max(1, ...questionTags.map((t) => t.question_count ?? 0));
+
+  function quizScoreColor(pct: number) {
+    if (pct < 50) return "bg-danger";
+    if (pct < 75) return "bg-warning";
+    return "bg-success";
+  }
+
   if (loading || !user) return null;
 
   return (
@@ -136,13 +145,12 @@ export default function LecturerDashboardPage() {
             <>
               {questionTags.map((t) => (
                 <li key={t.tag_id} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-                  <div className="flex items-center justify-between text-sm">
-                    <strong className="font-semibold">{t.topic_label}</strong>
-                    <span className="rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent">
-                      {t.question_count} question{t.question_count === 1 ? "" : "s"}
-                    </span>
-                  </div>
-                  <p className="mt-1.5 text-xs text-muted">
+                  <BarRow
+                    label={t.topic_label}
+                    valueLabel={`${t.question_count} question${t.question_count === 1 ? "" : "s"}`}
+                    percent={((t.question_count ?? 0) / maxQuestionCount) * 100}
+                  />
+                  <p className="mt-2 text-xs text-muted">
                     {new Date(t.period_start).toLocaleDateString()} – {new Date(t.period_end).toLocaleDateString()}
                   </p>
                 </li>
@@ -167,13 +175,13 @@ export default function LecturerDashboardPage() {
             <>
               {quizTags.map((t) => (
                 <li key={t.tag_id} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-                  <div className="flex items-center justify-between text-sm">
-                    <strong className="font-semibold">{t.topic_label}</strong>
-                    <span className="rounded-full bg-warning-bg px-2.5 py-0.5 text-xs font-medium text-warning">
-                      {t.avg_quiz_score_pct?.toFixed(0)}% avg ({t.quiz_attempt_count} attempt{t.quiz_attempt_count === 1 ? "" : "s"})
-                    </span>
-                  </div>
-                  <p className="mt-1.5 text-xs text-muted">
+                  <BarRow
+                    label={t.topic_label}
+                    valueLabel={`${t.avg_quiz_score_pct?.toFixed(0)}% avg (${t.quiz_attempt_count} attempt${t.quiz_attempt_count === 1 ? "" : "s"})`}
+                    percent={t.avg_quiz_score_pct ?? 0}
+                    colorClass={quizScoreColor(t.avg_quiz_score_pct ?? 0)}
+                  />
+                  <p className="mt-2 text-xs text-muted">
                     {new Date(t.period_start).toLocaleDateString()} – {new Date(t.period_end).toLocaleDateString()}
                   </p>
                 </li>
