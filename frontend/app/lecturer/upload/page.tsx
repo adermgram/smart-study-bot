@@ -12,6 +12,7 @@ interface Course {
   course_id: string;
   code: string;
   title: string;
+  owner_id: string | null;
 }
 
 interface DocumentRow {
@@ -43,27 +44,35 @@ export default function LecturerUploadPage() {
   const [creatingCourse, setCreatingCourse] = useState(false);
   const [courseError, setCourseError] = useState<string | null>(null);
 
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
   useEffect(() => {
     if (!loading && (!user || user.role !== "lecturer")) router.push("/courses");
   }, [loading, user, router]);
 
+  function loadCourses() {
+    apiFetch<Course[]>("/courses?mine=true").then((cs) => {
+      setCourses(cs);
+      setCourseId((current) => (cs.some((c) => c.course_id === current) ? current : (cs[0]?.course_id ?? "")));
+    });
+  }
+
   useEffect(() => {
-    if (user?.role === "lecturer") {
-      apiFetch<Course[]>("/courses").then((cs) => {
-        setCourses(cs);
-        if (cs.length > 0) setCourseId(cs[0].course_id);
-      });
-    }
+    if (user?.role === "lecturer") loadCourses();
   }, [user]);
 
   useEffect(() => {
     if (!courseId) return;
     setDocumentsLoading(true);
+    setDeleteConfirmText("");
     apiFetch<DocumentRow[]>(`/courses/${courseId}/documents`)
       .then(setDocuments)
       .catch(() => setDocuments([]))
       .finally(() => setDocumentsLoading(false));
   }, [courseId]);
+
+  const selectedCourse = courses.find((c) => c.course_id === courseId) ?? null;
 
   async function onCreateCourse() {
     if (!newCode.trim() || !newTitle.trim()) return;
@@ -84,6 +93,21 @@ export default function LecturerUploadPage() {
       setCourseError(err instanceof ApiError ? err.message : "Could not create the course");
     } finally {
       setCreatingCourse(false);
+    }
+  }
+
+  async function onDeleteCourse() {
+    if (!selectedCourse || deleteConfirmText !== selectedCourse.code) return;
+    setDeleting(true);
+    try {
+      await apiFetch(`/courses/${selectedCourse.course_id}`, { method: "DELETE" });
+      toast(`${selectedCourse.code} deleted`);
+      setDeleteConfirmText("");
+      loadCourses();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : "Could not delete the course", "error");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -239,6 +263,32 @@ export default function LecturerUploadPage() {
           </>
         )}
       </ul>
+
+      {selectedCourse && (
+        <div className="mt-10 rounded-2xl border border-danger-border bg-danger-bg p-5">
+          <h2 className="text-sm font-semibold text-danger">Danger zone</h2>
+          <p className="mt-1 text-sm text-danger/90">
+            Deleting <strong>{selectedCourse.code}</strong> permanently removes its uploaded material, every
+            student&apos;s conversations and quiz attempts, and its topic tags. This can&apos;t be undone.
+          </p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <input
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder={`Type ${selectedCourse.code} to confirm`}
+              className="min-w-0 flex-1 rounded-xl border border-danger-border bg-surface px-3.5 py-2.5 text-sm outline-none transition-shadow focus:ring-2 focus:ring-danger/40"
+            />
+            <button
+              onClick={onDeleteCourse}
+              disabled={deleting || deleteConfirmText !== selectedCourse.code}
+              className="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-danger px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:opacity-90 disabled:opacity-50"
+            >
+              {deleting && <Spinner className="h-4 w-4" />}
+              {deleting ? "Deleting..." : `Delete ${selectedCourse.code}`}
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

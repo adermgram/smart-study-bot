@@ -7,6 +7,7 @@ class CourseResponse(BaseModel):
     course_id: uuid.UUID
     code: str
     title: str
+    owner_id: uuid.UUID | None
 
     model_config = {"from_attributes": True}
 

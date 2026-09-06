@@ -44,7 +44,7 @@ export default function LecturerDashboardPage() {
 
   useEffect(() => {
     if (user?.role === "lecturer") {
-      apiFetch<Course[]>("/courses").then((cs) => {
+      apiFetch<Course[]>("/courses?mine=true").then((cs) => {
         setCourses(cs);
         if (cs.length > 0) setCourseId(cs[0].course_id);
       });

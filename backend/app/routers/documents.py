@@ -1,25 +1,18 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.core.deps import require_role
-from app.models.course import Course
 from app.models.document import DocumentChunk, KnowledgeDocument
 from app.models.user import User, UserRole
 from app.schemas.document import DocumentResponse
+from app.services.courses import get_manageable_course_or_403
 from app.services.documents import ingest_document
 
 router = APIRouter(prefix="/courses/{course_id}/documents", tags=["documents"])
-
-
-async def _get_course_or_404(db: AsyncSession, course_id: uuid.UUID) -> Course:
-    course = await db.get(Course, course_id)
-    if course is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Course not found")
-    return course
 
 
 @router.post("", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
@@ -29,7 +22,7 @@ async def upload_document(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_role(UserRole.lecturer)),
 ):
-    await _get_course_or_404(db, course_id)
+    await get_manageable_course_or_403(db, course_id=course_id, user=user)
     content = await file.read()
     document, chunk_count = await ingest_document(
         db,
@@ -52,9 +45,9 @@ async def upload_document(
 async def list_documents(
     course_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _user: User = Depends(require_role(UserRole.lecturer)),
+    user: User = Depends(require_role(UserRole.lecturer)),
 ):
-    await _get_course_or_404(db, course_id)
+    await get_manageable_course_or_403(db, course_id=course_id, user=user)
     result = await db.execute(
         select(KnowledgeDocument, func.count(DocumentChunk.chunk_id))
         .outerjoin(DocumentChunk, DocumentChunk.document_id == KnowledgeDocument.document_id)
