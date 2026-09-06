@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { apiFetch, ApiError } from "@/lib/api";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
 
 interface Course {
   course_id: string;
@@ -28,6 +30,7 @@ export default function LecturerDashboardPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [courseId, setCourseId] = useState("");
   const [tags, setTags] = useState<TopicTag[]>([]);
+  const [tagsLoading, setTagsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,7 +49,11 @@ export default function LecturerDashboardPage() {
 
   useEffect(() => {
     if (!courseId) return;
-    apiFetch<TopicTag[]>(`/courses/${courseId}/topic-tags`).then(setTags).catch(() => setTags([]));
+    setTagsLoading(true);
+    apiFetch<TopicTag[]>(`/courses/${courseId}/topic-tags`)
+      .then(setTags)
+      .catch(() => setTags([]))
+      .finally(() => setTagsLoading(false));
   }, [courseId]);
 
   async function onRefresh() {
@@ -82,16 +89,17 @@ export default function LecturerDashboardPage() {
     <main className="mx-auto max-w-2xl flex-1 p-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Topic-tag dashboard</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-xl font-semibold tracking-tight">Topic-tag dashboard</h1>
+          <p className="mt-1 text-sm text-muted">
             Aggregated, anonymized -- no individual student content is shown here.
           </p>
         </div>
         <button
           onClick={onRefresh}
           disabled={refreshing || !courseId}
-          className="whitespace-nowrap rounded border px-3 py-2 text-sm disabled:opacity-50"
+          className="flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-accent/10 hover:text-accent disabled:opacity-50"
         >
+          {refreshing && <Spinner className="h-3.5 w-3.5" />}
           {refreshing ? "Refreshing..." : "Refresh now"}
         </button>
       </div>
@@ -102,7 +110,7 @@ export default function LecturerDashboardPage() {
           id="course"
           value={courseId}
           onChange={(e) => setCourseId(e.target.value)}
-          className="w-full rounded border px-3 py-2"
+          className="w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm outline-none transition-shadow focus:ring-2 focus:ring-accent/40"
         >
           {courses.map((c) => (
             <option key={c.course_id} value={c.course_id}>
@@ -112,48 +120,70 @@ export default function LecturerDashboardPage() {
         </select>
       </div>
 
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {error && (
+        <p className="mt-3 rounded-lg border border-danger-border bg-danger-bg px-3 py-2 text-sm text-danger">
+          {error}
+        </p>
+      )}
 
       <section className="mt-8">
-        <h2 className="text-lg font-medium">Most-asked topics</h2>
-        <p className="text-xs text-gray-500">Students are curious about these -- consider more examples or a follow-up note.</p>
-        <ul className="mt-2 space-y-2">
-          {questionTags.map((t) => (
-            <li key={t.tag_id} className="rounded border p-3 text-sm">
-              <div className="flex items-center justify-between">
-                <strong>{t.topic_label}</strong>
-                <span>{t.question_count} question{t.question_count === 1 ? "" : "s"}</span>
-              </div>
-              <p className="mt-1 text-xs text-gray-500">
-                {new Date(t.period_start).toLocaleDateString()} – {new Date(t.period_end).toLocaleDateString()}
-              </p>
-            </li>
-          ))}
-          {questionTags.length === 0 && (
-            <li className="text-sm text-gray-500">No questions recorded yet for the current period.</li>
+        <h2 className="text-base font-semibold">Most-asked topics</h2>
+        <p className="text-xs text-muted">Students are curious about these -- consider more examples or a follow-up note.</p>
+        <ul className="mt-3 space-y-2">
+          {tagsLoading ? (
+            [0, 1].map((i) => <Skeleton key={i} className="h-16 w-full rounded-2xl" />)
+          ) : (
+            <>
+              {questionTags.map((t) => (
+                <li key={t.tag_id} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+                  <div className="flex items-center justify-between text-sm">
+                    <strong className="font-semibold">{t.topic_label}</strong>
+                    <span className="rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent">
+                      {t.question_count} question{t.question_count === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <p className="mt-1.5 text-xs text-muted">
+                    {new Date(t.period_start).toLocaleDateString()} – {new Date(t.period_end).toLocaleDateString()}
+                  </p>
+                </li>
+              ))}
+              {questionTags.length === 0 && (
+                <li className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted">
+                  No questions recorded yet for the current period.
+                </li>
+              )}
+            </>
           )}
         </ul>
       </section>
 
       <section className="mt-8">
-        <h2 className="text-lg font-medium">Weakest quiz topics</h2>
-        <p className="text-xs text-gray-500">Lowest average self-assessment score -- these may need reteaching, not just more material.</p>
-        <ul className="mt-2 space-y-2">
-          {quizTags.map((t) => (
-            <li key={t.tag_id} className="rounded border p-3 text-sm">
-              <div className="flex items-center justify-between">
-                <strong>{t.topic_label}</strong>
-                <span>
-                  {t.avg_quiz_score_pct?.toFixed(0)}% avg ({t.quiz_attempt_count} attempt{t.quiz_attempt_count === 1 ? "" : "s"})
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-gray-500">
-                {new Date(t.period_start).toLocaleDateString()} – {new Date(t.period_end).toLocaleDateString()}
-              </p>
-            </li>
-          ))}
-          {quizTags.length === 0 && (
-            <li className="text-sm text-gray-500">No quiz attempts recorded yet for the current period.</li>
+        <h2 className="text-base font-semibold">Weakest quiz topics</h2>
+        <p className="text-xs text-muted">Lowest average self-assessment score -- these may need reteaching, not just more material.</p>
+        <ul className="mt-3 space-y-2">
+          {tagsLoading ? (
+            [0, 1].map((i) => <Skeleton key={i} className="h-16 w-full rounded-2xl" />)
+          ) : (
+            <>
+              {quizTags.map((t) => (
+                <li key={t.tag_id} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+                  <div className="flex items-center justify-between text-sm">
+                    <strong className="font-semibold">{t.topic_label}</strong>
+                    <span className="rounded-full bg-warning-bg px-2.5 py-0.5 text-xs font-medium text-warning">
+                      {t.avg_quiz_score_pct?.toFixed(0)}% avg ({t.quiz_attempt_count} attempt{t.quiz_attempt_count === 1 ? "" : "s"})
+                    </span>
+                  </div>
+                  <p className="mt-1.5 text-xs text-muted">
+                    {new Date(t.period_start).toLocaleDateString()} – {new Date(t.period_end).toLocaleDateString()}
+                  </p>
+                </li>
+              ))}
+              {quizTags.length === 0 && (
+                <li className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted">
+                  No quiz attempts recorded yet for the current period.
+                </li>
+              )}
+            </>
           )}
         </ul>
       </section>
