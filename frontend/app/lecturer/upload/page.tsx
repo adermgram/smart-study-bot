@@ -29,6 +29,12 @@ export default function LecturerUploadPage() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [addingCourse, setAddingCourse] = useState(false);
+  const [newCode, setNewCode] = useState("");
+  const [newTitle, setNewTitle] = useState("");
+  const [creatingCourse, setCreatingCourse] = useState(false);
+  const [courseError, setCourseError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!loading && (!user || user.role !== "lecturer")) router.push("/courses");
   }, [loading, user, router]);
@@ -46,6 +52,27 @@ export default function LecturerUploadPage() {
     if (!courseId) return;
     apiFetch<DocumentRow[]>(`/courses/${courseId}/documents`).then(setDocuments).catch(() => setDocuments([]));
   }, [courseId]);
+
+  async function onCreateCourse() {
+    if (!newCode.trim() || !newTitle.trim()) return;
+    setCourseError(null);
+    setCreatingCourse(true);
+    try {
+      const course = await apiFetch<Course>("/courses", {
+        method: "POST",
+        body: JSON.stringify({ code: newCode.trim(), title: newTitle.trim() }),
+      });
+      setCourses((cs) => [...cs, course].sort((a, b) => a.code.localeCompare(b.code)));
+      setCourseId(course.course_id);
+      setNewCode("");
+      setNewTitle("");
+      setAddingCourse(false);
+    } catch (err) {
+      setCourseError(err instanceof ApiError ? err.message : "Could not create the course");
+    } finally {
+      setCreatingCourse(false);
+    }
+  }
 
   async function onUpload() {
     if (!file || !courseId) return;
@@ -83,18 +110,67 @@ export default function LecturerUploadPage() {
       <div className="mt-6 space-y-4">
         <div className="space-y-1">
           <label className="text-sm font-medium" htmlFor="course">Course</label>
-          <select
-            id="course"
-            value={courseId}
-            onChange={(e) => setCourseId(e.target.value)}
-            className="w-full rounded border px-3 py-2"
-          >
-            {courses.map((c) => (
-              <option key={c.course_id} value={c.course_id}>
-                {c.code} — {c.title}
-              </option>
-            ))}
-          </select>
+          {!addingCourse ? (
+            <div className="flex gap-2">
+              <select
+                id="course"
+                value={courseId}
+                onChange={(e) => setCourseId(e.target.value)}
+                className="w-full rounded border px-3 py-2"
+              >
+                {courses.map((c) => (
+                  <option key={c.course_id} value={c.course_id}>
+                    {c.code} — {c.title}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setAddingCourse(true)}
+                className="whitespace-nowrap rounded border px-3 py-2 text-sm"
+              >
+                + New course
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2 rounded border p-3">
+              <div className="flex gap-2">
+                <input
+                  value={newCode}
+                  onChange={(e) => setNewCode(e.target.value)}
+                  placeholder="Code, e.g. CSC311"
+                  className="w-32 rounded border px-3 py-2 text-sm"
+                />
+                <input
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder="Title, e.g. Data Structures"
+                  className="flex-1 rounded border px-3 py-2 text-sm"
+                />
+              </div>
+              {courseError && <p className="text-sm text-red-600">{courseError}</p>}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={onCreateCourse}
+                  disabled={creatingCourse || !newCode.trim() || !newTitle.trim()}
+                  className="rounded bg-black px-3 py-1.5 text-sm text-white disabled:opacity-50"
+                >
+                  {creatingCourse ? "Creating..." : "Create course"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAddingCourse(false);
+                    setCourseError(null);
+                  }}
+                  className="rounded border px-3 py-1.5 text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="space-y-1">
