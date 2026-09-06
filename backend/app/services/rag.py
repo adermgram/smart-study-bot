@@ -14,10 +14,31 @@ from app.services.llm import MODEL, client
 settings = get_settings()
 
 TOP_K = 5
-# How many prior messages feed into retrieval-query augmentation and the generation
-# prompt -- enough for a couple of exchanges of follow-up context, bounded so the
-# prompt (and cost/latency) doesn't grow unbounded over a long-running conversation.
+# How many prior messages feed the resolve step and the generation prompt -- enough
+# for a couple of exchanges of follow-up context, bounded so the prompt (and cost/
+# latency) doesn't grow unbounded over a long-running conversation.
 HISTORY_LIMIT = 6
+
+RESOLVE_SYSTEM_PROMPT = (
+    "You maintain a student's ongoing conversation with a course-material assistant. Given "
+    "the conversation so far and the student's newest message, decide two things:\n\n"
+    "1. Is the newest message pure conversational filler with no question or request in it at "
+    "all -- a greeting, thanks, or a bare acknowledgment like 'ok', 'got it', 'cool', 'that's "
+    "helpful'? Mark chitchat true ONLY for that. ANY actual question is NOT chitchat, even if "
+    "it's a follow-up that only makes sense with context (e.g. 'what about the other one', 'can "
+    "we remove from the middle of it'), and even if it has nothing to do with the course at all "
+    "(e.g. 'what is the capital of France', 'write me a poem') -- those still need to go to the "
+    "material check so they can be answered or correctly declined. When genuinely unsure, prefer "
+    "chitchat: false.\n\n"
+    "2. If it's a real question (chitchat: false), rewrite it as a fully self-contained, standalone question that "
+    "makes sense with NO prior context -- resolve every pronoun and implicit reference ('it', "
+    "'that', 'the other one', 'this') to the SPECIFIC thing actually being discussed, using the "
+    "conversation history. Do not answer the question, only rewrite it. If it's already self-"
+    "contained, return it lightly cleaned up.\n\n"
+    'Return strictly valid JSON, no prose or markdown fences:\n{"chitchat": true|false, '
+    '"standalone_question": "..."}\n'
+    "standalone_question must be an empty string if chitchat is true."
+)
 
 SYSTEM_PROMPT = (
     "You are a study assistant helping a student through an ongoing conversation about their "
@@ -25,27 +46,31 @@ SYSTEM_PROMPT = (
     "question -- they were chosen because they clear a similarity bar, so assume they're usable "
     "and look for the answer in them before concluding otherwise. They're machine-extracted from a "
     "PDF, so expect irregular spacing, mid-sentence cuts, and stray page furniture (headers, figure "
-    "captions, URLs) -- read past that instead of dismissing a fragment as unusable. Synthesize "
-    "across multiple excerpts if the answer is spread across them.\n\n"
+    "captions, URLs) -- read past that instead of dismissing a fragment as unusable. A chunk can "
+    "also straddle a section boundary in the source document (e.g. the tail of one topic's "
+    "explanation followed by the next topic's heading) -- when that happens, use only the part "
+    "that actually answers the question asked, not whatever topic the chunk trails off into.\n\n"
     "Base every factual claim, definition, or explanation of the course content strictly on these "
     "excerpts -- never invent or alter facts about the course content itself, even if you know the "
     "topic generally. Decline only if, having actually read all the excerpts below, none of them "
     "touch the CURRENT question -- don't decline just because no single excerpt is a complete, "
-    "cleanly-worded textbook definition on its own, and don't let an earlier question in this "
-    "conversation being about a different topic make you doubt excerpts that do address this one: "
-    "judge groundedness solely against the excerpts actually shown below and the question actually "
-    "asked now.\n\n"
+    "cleanly-worded textbook definition on its own.\n\n"
     "You may illustrate a grounded explanation with your own everyday analogies or examples that "
     "aren't drawn from the excerpts, when that would help the student understand -- that's a "
-    "teaching aid, not a course-content claim, so it's fine even though it isn't in the material. "
-    "Use the conversation so far to understand follow-up questions (e.g. 'what's the difference "
-    "between them') in context.\n\n"
+    "teaching aid, not a course-content claim, so it's fine even though it isn't in the material.\n\n"
     "Respond with strictly valid JSON, no prose or markdown fences, matching this shape:\n"
     '{"grounded": true, "answer": "..."}\n'
     "grounded is true if the excerpts actually let you answer (with or without an added analogy), "
     "false if you're declining. When declining, still put a short, polite explanation in answer. "
     "Do not mention excerpts, retrieval, or JSON in the answer text itself -- answer as a normal "
     "tutor would."
+)
+
+CHITCHAT_SYSTEM_PROMPT = (
+    "You are a study assistant. The student just sent a conversational message with no course-"
+    "content request in it (e.g. thanks, ok, a greeting). Reply briefly and warmly in one short "
+    "sentence -- don't re-explain anything from earlier in the conversation, don't ask an "
+    "unprompted follow-up question, just acknowledge naturally like a normal tutor would."
 )
 
 DECLINE_MESSAGE = (
@@ -60,15 +85,46 @@ class RetrievedChunk:
     similarity: float
 
 
-def _build_search_query(question: str, history: list[Message]) -> str:
-    """A standalone question embeds fine as-is, but a follow-up like 'what's the
-    difference between them' carries no retrievable signal on its own -- folding in
-    the last couple of exchanges gives retrieval the topic words ('array', 'linked
-    list', ...) it needs, without a separate query-rewrite LLM call."""
+def _history_turns(history: list[Message]) -> list[dict]:
+    return [{"role": "user" if m.sender == MessageSender.user else "assistant", "content": m.content} for m in history]
+
+
+async def _resolve_question(question: str, history: list[Message]) -> tuple[bool, str]:
+    """Classifies the message as chit-chat vs. a real question, and -- for a real
+    question -- rewrites it into a standalone form with pronouns resolved against
+    history. Replaces an earlier heuristic that embedded the raw question plus a
+    chunk of history side by side: that approach could still hand the model a mix
+    of chunks about two different things discussed nearby (e.g. arrays vs. linked
+    lists) with nothing forcing it to pick the one the pronoun actually meant. A
+    resolved question ('remove from the middle of an array', not '...of it') fixes
+    that at the retrieval step instead of hoping generation disambiguates it."""
     if not history:
-        return question
-    recent = "\n".join(m.content for m in history[-4:])
-    return f"{recent}\n{question}"
+        return False, question
+
+    resp = await client.chat.completions.create(
+        model=MODEL,
+        messages=[
+            {"role": "system", "content": RESOLVE_SYSTEM_PROMPT},
+            *_history_turns(history),
+            {"role": "user", "content": question},
+        ],
+        response_format={"type": "json_object"},
+        temperature=0.0,
+    )
+    parsed = json.loads(resp.choices[0].message.content or "{}")
+    chitchat = bool(parsed.get("chitchat", False))
+    standalone = parsed.get("standalone_question") or question
+    return chitchat, standalone
+
+
+async def _generate_chitchat_reply(question: str, history: list[Message]) -> str:
+    messages = [
+        {"role": "system", "content": CHITCHAT_SYSTEM_PROMPT},
+        *_history_turns(history),
+        {"role": "user", "content": question},
+    ]
+    resp = await client.chat.completions.create(model=MODEL, messages=messages, temperature=0.3)
+    return resp.choices[0].message.content or "You're welcome!"
 
 
 async def retrieve_chunks(
@@ -93,12 +149,9 @@ async def generate_answer(question: str, chunks: list[RetrievedChunk], history: 
     the model; the model is what's positioned to know whether it actually answered from
     it or declined, so that's what the persisted `grounded` flag reflects."""
     context = "\n\n---\n\n".join(c.chunk.content for c in chunks)
-    history_turns = [
-        {"role": "user" if m.sender == MessageSender.user else "assistant", "content": m.content} for m in history
-    ]
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        *history_turns,
+        *_history_turns(history),
         {"role": "user", "content": f"Course material excerpts:\n\n{context}\n\n---\n\nQuestion: {question}"},
     ]
     resp = await client.chat.completions.create(
@@ -110,58 +163,20 @@ async def generate_answer(question: str, chunks: list[RetrievedChunk], history: 
     return (answer if grounded else DECLINE_MESSAGE), grounded
 
 
-@dataclass
-class RetrievalResult:
-    chunks: list[RetrievedChunk]
-    best_similarity: float
-
-
-async def _retrieve_with_history(
-    db: AsyncSession, *, course_id: uuid.UUID, question: str, history: list[Message]
-) -> RetrievalResult:
-    """Retrieve using the raw question AND (when there's history) a history-augmented
-    version, keeping each pool's own top few rather than re-ranking both together on one
-    merged similarity ordering. Cosine similarity to two different embedded strings isn't
-    on a comparable scale -- in testing, the augmented query's scores ran consistently
-    higher even when its chunks were markedly less relevant (mostly PDF page-header noise),
-    which silently crowded the raw pool's genuinely correct top match out of the top-K
-    entirely. Keeping both pools' own rankings intact avoids that: the raw-question pass
-    protects topic-shift questions ('what is linked list' right after an array question)
-    from being diluted by the prior topic, while the augmented pass is what makes
-    pronoun-dependent follow-ups ('what's the difference between them') resolvable at all."""
-    raw_chunks = await retrieve_chunks(db, course_id=course_id, question=question)
-    if not history:
-        return RetrievalResult(raw_chunks, raw_chunks[0].similarity if raw_chunks else 0.0)
-
-    augmented_query = _build_search_query(question, history)
-    augmented_chunks = await retrieve_chunks(db, course_id=course_id, question=augmented_query)
-
-    combined: list[RetrievedChunk] = []
-    seen: set[uuid.UUID] = set()
-    for c in raw_chunks[:4] + augmented_chunks[:4]:
-        if c.chunk.chunk_id not in seen:
-            combined.append(c)
-            seen.add(c.chunk.chunk_id)
-
-    best_similarity = max(
-        raw_chunks[0].similarity if raw_chunks else 0.0,
-        augmented_chunks[0].similarity if augmented_chunks else 0.0,
-    )
-    return RetrievalResult(combined, best_similarity)
-
-
 async def answer_question(
     db: AsyncSession, *, course_id: uuid.UUID, question: str, history: list[Message] | None = None
 ) -> tuple[str, bool]:
     history = history[-HISTORY_LIMIT:] if history else []
 
-    result = await _retrieve_with_history(db, course_id=course_id, question=question, history=history)
-    if not result.chunks or result.best_similarity < settings.similarity_threshold:
+    chitchat, standalone_question = await _resolve_question(question, history)
+    if chitchat:
+        return await _generate_chitchat_reply(question, history), True
+
+    chunks = await retrieve_chunks(db, course_id=course_id, question=standalone_question)
+    if not chunks or chunks[0].similarity < settings.similarity_threshold:
         # Purely a cost/latency guard against clearly-irrelevant questions -- skips paying
-        # for a generation call when nothing retrieved is even plausibly on-topic. This is
-        # NOT the source of truth for the grounded label (see generate_answer): a history-
-        # augmented retrieval pass can occasionally clear this bar on a genuinely off-topic
-        # follow-up just because it shares vocabulary with recent on-topic turns, so the
-        # model's own post-hoc judgment is what actually decides grounded when we get there.
+        # for a generation call when nothing retrieved is even plausibly on-topic. Not the
+        # source of truth for the grounded label: the model's own post-hoc judgment in
+        # generate_answer is (see its docstring).
         return DECLINE_MESSAGE, False
-    return await generate_answer(question, result.chunks, history)
+    return await generate_answer(standalone_question, chunks, history)
