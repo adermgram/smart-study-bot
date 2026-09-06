@@ -28,6 +28,17 @@ async def add_message(
     return message
 
 
+async def get_recent_messages(db: AsyncSession, *, conversation_id: uuid.UUID, limit: int = 10) -> list[Message]:
+    """Most recent messages, oldest first -- ready to drop straight into a chat prompt."""
+    result = await db.execute(
+        select(Message)
+        .where(Message.conversation_id == conversation_id)
+        .order_by(Message.created_at.desc())
+        .limit(limit)
+    )
+    return list(reversed(result.scalars().all()))
+
+
 async def list_conversations(db: AsyncSession, *, user_id: uuid.UUID) -> list[Conversation]:
     result = await db.execute(
         select(Conversation)

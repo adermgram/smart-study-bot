@@ -9,7 +9,7 @@ from app.models.conversation import MessageSender
 from app.models.course import Course
 from app.models.user import User, UserRole
 from app.schemas.chat import AskRequest, AskResponse
-from app.services.conversations import add_message, get_or_create_conversation
+from app.services.conversations import add_message, get_or_create_conversation, get_recent_messages
 from app.services.rag import answer_question
 
 router = APIRouter(prefix="/courses/{course_id}", tags=["chat"])
@@ -27,10 +27,11 @@ async def ask(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Course not found")
 
     conversation = await get_or_create_conversation(db, user_id=user.user_id, course_id=course_id)
+    history = await get_recent_messages(db, conversation_id=conversation.conversation_id)
 
     # Compute the outcome before persisting so both rows of the exchange share the
     # same grounded flag (FR6.2: outcome is answered/declined per exchange, not per row).
-    answer, grounded = await answer_question(db, course_id=course_id, question=payload.question)
+    answer, grounded = await answer_question(db, course_id=course_id, question=payload.question, history=history)
 
     await add_message(db, conversation_id=conversation.conversation_id, sender=MessageSender.user, content=payload.question, grounded=grounded)
     await add_message(db, conversation_id=conversation.conversation_id, sender=MessageSender.assistant, content=answer, grounded=grounded)
