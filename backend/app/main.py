@@ -11,6 +11,12 @@ app = FastAPI(title="Smart Study Assistant Bot API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    # Also allow any Vercel deployment of this project -- the production domain plus
+    # every branch-preview and per-commit URL Vercel generates (e.g.
+    # smart-study-bot-git-<branch>-adermgrams-projects.vercel.app), so preview branches
+    # can hit the API without a manual CORS_ORIGINS update on every push. Scoped to
+    # *.vercel.app subdomains starting with "smart-study" rather than the whole TLD.
+    allow_origin_regex=r"^https://smart-study[a-z0-9-]*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
