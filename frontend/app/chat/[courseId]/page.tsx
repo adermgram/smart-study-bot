@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { apiFetch, ApiError } from "@/lib/api";
 
@@ -21,9 +21,10 @@ export default function ChatPage({ params }: PageProps<"/chat/[courseId]">) {
   const { courseId } = use(params);
   const { user, loading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [course, setCourse] = useState<Course | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [question, setQuestion] = useState("");
+  const [question, setQuestion] = useState(() => searchParams.get("q") ?? "");
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);

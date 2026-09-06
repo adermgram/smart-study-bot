@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { apiFetch, ApiError } from "@/lib/api";
@@ -22,7 +23,21 @@ interface QuizResult {
   correct_index: number;
   chosen_index: number;
   correct: boolean;
+  explanation: string | null;
 }
+
+interface PastAttempt {
+  attempt_id: string;
+  course_id: string;
+  topic: string;
+  score: number | null;
+  total_questions: number;
+  attempted_at: string;
+}
+
+// Below this fraction, nudge the student toward asking about the topic in chat instead
+// of just showing the score and moving on.
+const WEAK_SCORE_THRESHOLD = 0.6;
 
 export default function QuizPage({ params }: PageProps<"/quiz/[courseId]">) {
   const { courseId } = use(params);
@@ -33,6 +48,7 @@ export default function QuizPage({ params }: PageProps<"/quiz/[courseId]">) {
   const [topic, setTopic] = useState("");
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState<PastAttempt[]>([]);
 
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
@@ -47,6 +63,14 @@ export default function QuizPage({ params }: PageProps<"/quiz/[courseId]">) {
   useEffect(() => {
     apiFetch<Course[]>("/courses").then((cs) => setCourse(cs.find((c) => c.course_id === courseId) ?? null));
   }, [courseId]);
+
+  useEffect(() => {
+    if (user?.role === "student") {
+      apiFetch<PastAttempt[]>("/users/me/quiz-results").then((results) =>
+        setHistory(results.filter((r) => r.course_id === courseId))
+      );
+    }
+  }, [user, courseId]);
 
   async function onGenerate(e: React.FormEvent) {
     e.preventDefault();
@@ -79,6 +103,17 @@ export default function QuizPage({ params }: PageProps<"/quiz/[courseId]">) {
         { method: "POST", body: JSON.stringify({ answers }) }
       );
       setOutcome(res);
+      setHistory((h) => [
+        {
+          attempt_id: attemptId,
+          course_id: courseId,
+          topic,
+          score: res.score,
+          total_questions: res.total,
+          attempted_at: new Date().toISOString(),
+        },
+        ...h,
+      ]);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not submit the quiz");
     } finally {
@@ -95,6 +130,8 @@ export default function QuizPage({ params }: PageProps<"/quiz/[courseId]">) {
   }
 
   if (loading || !user) return null;
+
+  const isWeak = outcome !== null && outcome.total > 0 && outcome.score / outcome.total < WEAK_SCORE_THRESHOLD;
 
   return (
     <main className="mx-auto max-w-2xl flex-1 p-6">
@@ -160,6 +197,20 @@ export default function QuizPage({ params }: PageProps<"/quiz/[courseId]">) {
           <p className="text-lg font-medium">
             Score: {outcome.score} / {outcome.total}
           </p>
+
+          {isWeak && (
+            <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm">
+              This score was on the low side for <strong>{topic}</strong>.{" "}
+              <Link
+                href={`/chat/${courseId}?q=${encodeURIComponent(`Can you help me understand ${topic}?`)}`}
+                className="underline"
+              >
+                Ask about it in chat
+              </Link>
+              .
+            </div>
+          )}
+
           {outcome.results.map((r, i) => (
             <div key={i} className={`rounded border p-4 ${r.correct ? "border-green-400" : "border-red-400"}`}>
               <p className="font-medium">{i + 1}. {r.question}</p>
@@ -169,12 +220,33 @@ export default function QuizPage({ params }: PageProps<"/quiz/[courseId]">) {
               {!r.correct && (
                 <p className="text-sm text-gray-600">Correct answer: {r.options[r.correct_index]}</p>
               )}
+              {r.explanation && <p className="mt-1 text-sm text-gray-600">{r.explanation}</p>}
             </div>
           ))}
           <button onClick={reset} className="rounded border px-4 py-2 text-sm">
             Take another quiz
           </button>
         </div>
+      )}
+
+      {!attemptId && (
+        <section className="mt-10">
+          <h2 className="text-lg font-medium">Past attempts</h2>
+          <ul className="mt-2 space-y-2">
+            {history.map((h) => (
+              <li key={h.attempt_id} className="rounded border p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <strong>{h.topic}</strong>
+                  <span>{h.score} / {h.total_questions}</span>
+                </div>
+                <p className="mt-1 text-xs text-gray-500">{new Date(h.attempted_at).toLocaleString()}</p>
+              </li>
+            ))}
+            {history.length === 0 && (
+              <li className="text-sm text-gray-500">No past attempts for this course yet.</li>
+            )}
+          </ul>
+        </section>
       )}
     </main>
   );

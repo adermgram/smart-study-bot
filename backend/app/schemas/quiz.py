@@ -30,6 +30,7 @@ class QuizQuestionResult(BaseModel):
     correct_index: int
     chosen_index: int
     correct: bool
+    explanation: str | None = None
 
 
 class QuizSubmitResponse(BaseModel):

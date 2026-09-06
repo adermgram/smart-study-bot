@@ -12,10 +12,12 @@ grounded strictly in the supplied course material excerpts. Do not use outside k
 question and its correct answer must be answerable directly from the excerpts.
 
 Return strictly valid JSON matching this shape, with no prose or markdown fences:
-{"questions": [{"question": "...", "options": ["...", "...", "...", "..."], "correct_index": 0}]}
+{"questions": [{"question": "...", "options": ["...", "...", "...", "..."], "correct_index": 0, "explanation": "..."}]}
 
 Each question must have exactly 4 options and correct_index must be the 0-based index of the \
-correct option."""
+correct option. explanation is a short (1-2 sentence) grounded explanation of why that option is \
+correct, shown to the student after they answer -- write it so it teaches the concept, not just \
+restates the answer."""
 
 
 async def generate_quiz(
@@ -71,6 +73,7 @@ def grade_quiz(attempt: QuizAttempt, answers: list[int]) -> list[dict]:
                 "correct_index": q["correct_index"],
                 "chosen_index": chosen,
                 "correct": chosen == q["correct_index"],
+                "explanation": q.get("explanation"),
             }
         )
     return results
